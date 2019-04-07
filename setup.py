@@ -9,7 +9,7 @@ README = (HERE / "README.md").read_text()
 
 # This call to setup() does all the work
 setup(
-    name="beaver",
+    name="beavr",
     version="1.0.0",
     description="An animal that eats logs",
     long_description=README,
