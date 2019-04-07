@@ -1,5 +1,7 @@
 import argparse
+import calendar
 import dateutil.parser
+import datetime
 import os
 import sys
 
@@ -27,6 +29,198 @@ def parse_range(string):
 		errprint('Invalid format for end of range')
 		sys.exit(1)
 	return start, end
+
+def validate_datetime(string):
+	"""
+	Validate datetime given in range
+
+	Follows these steps:
+		1. Parse by keywords (on, at), or check if contains date and/or time
+		3. Parse time
+		4. Parse date
+	"""
+	time = date = ''
+
+	# 1. Parse by keywords (on, at)
+	if ' on ' in string:
+		# `time` on `date`
+		time, date = string.split(' on ')[0], string.split(' on ')[1]
+	elif ' at ' in string:
+		# `date` at `time`
+		time, date = string.split(' at ')[1], string.split(' at ')[0]
+	else:
+		if ':' in string:
+			# contains time
+			time_index = [index for index, s in enumerate(string.split()) if ':' in s][0]
+			time = string[time_index:]
+			date = string[:time_index]
+		elif len(string.split()) == 1 and ('am' in string.lower() or 'pm' in string.lower()):
+			# contains only time
+			time = string
+		else:
+			# does not contain time
+			date = string
+
+	time = time.strip()
+	date = date.strip()
+	time = ''.join([t.lower() for t in time])
+	date = ''.join([d.lower() for d in date])
+
+	# 3. Parse time
+	if time == '':
+		hours = '0'
+		minutes = '0'
+		seconds = '0'
+	else:
+		if ':' in time:
+			hours, minutes, seconds = tuple(time.split(':') if len(time.split(':')) == 3 else time.split(':')+['0'])
+		else:
+			hours = time
+			minutes = seconds = '0'
+
+		if 'am' in hours or 'am' in minutes or 'am' in seconds:
+			is_am = True
+			is_24 = False
+			hours = hours.replace('am', '')
+			minutes = minutes.replace('am', '')
+			seconds = seconds.replace('am', '')
+		elif 'pm' in hours or 'pm' in minutes or 'pm' in seconds:
+			is_am = False
+			is_24 = False
+			hours = hours.replace('pm', '')
+			minutes = minutes.replace('pm', '')
+			seconds = seconds.replace('pm', '')
+		else:
+			is_24 = True
+
+		if not is_24:
+			if not is_am:
+				hours = str(int(hours) + 12)
+
+	if not hours.isdigit() or not minutes.isdigit() or not seconds.isdigit():
+		print(hours, minutes, seconds)
+		errprint("Could not determine time format")
+		sys.exit(1)
+
+	# 4. Parse date
+	days = {
+		'monday': 0,
+		'tuesday': 1,
+		'wednesday': 2,
+		'thursday': 3,
+		'friday': 4,
+		'saturday': 5,
+		'sunday': 6
+	}
+	months = {
+		'january': 0, 'jan': 0,
+		'february': 1, 'feb': 1,
+		'march': 2, 'mar': 2,
+		'april': 3, 'apr': 3,
+		'may': 4,
+		'june': 5, 'jun': 5,
+		'july': 6, 'jul': 6,
+		'august': 7, 'aug': 7,
+		'september': 8, 'sept': 8, 'sep': 8,
+		'october': 9, 'oct': 9,
+		'november': 10, 'nov': 10,
+		'december': 11, 'dec': 11
+	}
+	today = datetime.date.today()
+	day = today.day
+	month = today.month
+	year = today.year
+
+	if date in days:
+		# name of day
+		day_delta = today.weekday() - days[date]
+		day_delta += 7 if day_delta < 0 else 0
+		new_date = datetime.datetime.now() - datetime.timedelta(days=day_delta)
+	elif not len(set(date.split()).intersection(set(months))) == 0:
+		# name of month in format
+		elements = date.split()
+		if len(elements) == 1:
+			# just month
+			month_delta = today.month - 1 - months[date]
+			temp_year = today.year
+			if month_delta < 0:
+				month_delta += 12
+				temp_year -= 1
+
+			new_date = datetime.datetime(day=1, month=months[date]+1, year=temp_year)
+		elif len(elements) == 2:
+			# month + day
+			temp_month = elements[0] if elements[0].isalpha() else elements[1]
+			elements.remove(temp_month)
+			temp_day = elements[0]
+			temp_day = ''.join(char for char in temp_day if char.isdigit())
+
+			month_delta = today.month - 1 - months[temp_month]
+			temp_year = today.year
+			if month_delta < 0:
+				month_delta += 12
+				temp_year -= 1
+
+			new_date = datetime.datetime(day=int(temp_day), month=int(months[temp_month]+1), year=int(temp_year))
+		elif len(elements) == 3:
+			# month + day + year
+			temp_month = [e for e in elements if e.isalpha()][0]
+			elements.remove(temp_month)
+			elements = [''.join([char for char in e if char.isdigit()]) for e in elements]
+			temp_day = elements[0] if len(elements[0]) < len(elements[1]) else elements[1]
+			elements.remove(temp_day)
+			temp_year = elements[0]
+			new_date = datetime.datetime(day=int(temp_day), month=int(months[temp_month]+1), year=int(temp_year))
+		else:
+			# invalid
+			errprint("Could not determine date format")
+			sys.exit(1)
+	elif '/' in date:
+		# day, month, year separated by /
+		elements = date.split('/')
+		if len(elements) == 2:
+			new_date = datetime.datetime(day=int(elements[1]), month=int(elements[0]), year=today.year)
+			if datetime.datetime.now() < new_date:
+				new_date = datetime.datetime(day=new_date.day, month=new_date.month, year=today.year-1)
+		else:
+			new_date = dateutil.parser.parse(date)
+	elif '\'' in date:
+		# day, month, year separated by \
+		elements = date.split('\'')
+		if len(elements) == 2:
+			new_date = datetime.datetime(day=int(elements[1]), month=int(elements[0]), year=today.year)
+			if datetime.datetime.now() < new_date:
+				new_date = datetime.datetime(day=new_date.day, month=new_date.month, year=today.year-1)
+		else:
+			new_date = dateutil.parser.parse(date)
+	elif '-' in date:
+		# day, month, year separated by -
+		elements = date.split('-')
+		if len(elements) == 2:
+			new_date = datetime.datetime(day=int(elements[1]), month=int(elements[0]), year=today.year)
+			if datetime.datetime.now() < new_date:
+				new_date = datetime.datetime(day=new_date.day, month=new_date.month, year=today.year-1)
+		else:
+			new_date = dateutil.parser.parse(date)
+	else:
+		errprint("Could not determine date format")
+		sys.exit(1)
+
+	day = new_date.day
+	month = new_date.month
+	year = new_date.year
+
+	print(f"Hours: {hours}")
+	print(f"Minutes: {minutes}")
+	print(f"Seconds: {seconds}")
+
+	print(f"Day: {day}")
+	print(f"Month: {month}")
+	print(f"Year: {year}")
+
+def normalize_datetime(dt):
+	# TODO
+	return
 
 def is_date(date, fuzzy=False):
 	"""
