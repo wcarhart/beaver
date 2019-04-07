@@ -21,7 +21,7 @@ def parse_range(string):
 	end_datetime = validate_datetime(end)
 	validate_range(start_datetime, end_datetime)
 
-	return start, end
+	return start_datetime, end_datetime
 
 def validate_date(date, silence=False):
 	"""
@@ -238,9 +238,6 @@ def validate_datetime(string):
 	# Parse date
 	year, month, day = validate_date(date)
 
-	if not all([hours, minutes, seconds, year, month, day]):
-		return False
-
 	return datetime.datetime(year=year, month=month, day=day, hour=hours, minute=minutes, second=seconds)
 
 def validate_range(start, end):
@@ -249,8 +246,6 @@ def validate_range(start, end):
 		:start: (datetime) the start of the range
 		:end: (datetime) the end of the range
 	"""
-	print(start)
-	print(end)
 	if start > end:
 		print(red("End of range occurs before start of range"))
 		sys.exit(1)
@@ -293,36 +288,12 @@ def green(string):
 	"""
 	return f'\033[92m{string}\033[0m'
 
-def locate_date_and_time(string):
+def extract_timestamp(string):
 	"""
-	Locate the date and time stamps in a string
-		:string: (str) the string to search
+	Extract a timestamp from a given string
+		:string: (str) the string to parse
 	"""
-	date = time = ''
-	for word in string:
-		attempt = validate_date(word)
-		if not all(attempt):
-			date = word
-			break
-	for word in string:
-		attempt = validate_time(word)
-		if not all(attempt):
-			time = word
-			break
-	if date == '' and time == '':
-		return False, False
-	return date, time
-
-def dt(date, time):
-	"""
-	Create a datetime based on date and time
-		:date: the date for the datetime
-		:time: the time for the datetime
-	"""
-	return datetime.datetime(
-		year=date[0], month=date[1], day=date[2], 
-		hour=time[0], minute=time[1], second=[2]
-	)
+	return dateutil.parser.parse(string, fuzzy=True)
 
 def parse_logs(files, start, end, output):
 	"""
@@ -334,37 +305,39 @@ def parse_logs(files, start, end, output):
 	"""
 	result = ""
 	for file in files:
+		rbuffer = ""
 		with open(file) as f:
 			lines = f.readlines()
-			result += green(file) + "\n"
+			result += green(f">> {file}") + "\n"
+
 		for line in lines:
-			line_written = False
+			elements = line.split()
+			start_index = 0
+			end_index = 2 if len(elements) > 2 else -1
+			while not end_index == -1:
+				query = ' '.join(line.split()[start_index:end_index])
+				try:
+					timestamp = extract_timestamp(query)
+					if start < timestamp < end:
+						rbuffer += line
+					break
+				except ValueError:
+					start_index += 1
+					end_index += 1
+					if end_index > len(elements):
+						end_index = -1
+					continue
 
-			# if timestamp is in square brackets
-			in_brackets_text = str(re.findall('\[(.*)\]', line)[0])
-			date, time = locate_date_and_time(in_brackets_text)
-			if all([date, time]):
-				line_written = True
-				if start < dt(date, time) < end:
-					result += line + "\n"
+		if rbuffer == "":
+			rbuffer += red(f"  No logs found in {file} for query range")
 
-			# if timestamp is at the beginning of the line
-			if not line_written:
-				words = line.split()
-				date, time = locate_date_and_time(' '.join(words[0], words[1], words[2]))
-				if all([date, time]):
-					line_written = True
-					if start < dt(date, time) < end:
-						result += line + "\n"
-
-		result += line + "\n"
+		result += rbuffer + "\n\n"
 
 	if output == '':
 		print(result)
 	else:
 		with open(output) as f:
 			f.write(result)
-
 
 def build_parser():
 	"""Build CLI parser"""
@@ -380,7 +353,7 @@ def main():
 	args = parser.parse_args()
 
 	actual_range = ' '.join(args.range)
-	start,end = parse_range(actual_range)
+	start, end = parse_range(actual_range)
 
 	if args.file:
 		if os.path.isfile(args.file):
