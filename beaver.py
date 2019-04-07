@@ -18,7 +18,7 @@ def parse_range(string):
 		:string: (str) desired range of logging
 	"""
 	if not ' to ' in string:
-		errprint("Invalid format for range")
+		print(red("Invalid format for range"))
 		sys.exit(1)
 
 	start, end = string.split(' to ')[0], string.split(' to ')[1]
@@ -104,7 +104,7 @@ def validate_date(date):
 			new_date = datetime.datetime(day=int(temp_day), month=int(months[temp_month]+1), year=int(temp_year))
 		else:
 			# invalid
-			errprint("Could not determine date format")
+			print(red("Could not determine date format"))
 			sys.exit(1)
 	elif '/' in date:
 		# day, month, year separated by /
@@ -134,7 +134,7 @@ def validate_date(date):
 		else:
 			new_date = dateutil.parser.parse(date)
 	else:
-		errprint("Could not determine date format")
+		print(red("Could not determine date format"))
 		sys.exit(1)
 
 	day = new_date.day
@@ -181,7 +181,7 @@ def validate_time(time):
 
 	if not hours.isdigit() or not minutes.isdigit() or not seconds.isdigit():
 		print(hours, minutes, seconds)
-		errprint("Could not determine time format")
+		print(red("Could not determine time format"))
 		sys.exit(1)
 
 	return int(hours), int(minutes), int(seconds)
@@ -245,15 +245,18 @@ def validate_range(start, end):
 		:start: (datetime) the start of the range
 		:end: (datetime) the end of the range
 	"""
-	if end > start:
-		errprint("End of range occurs before start of range")
+	if start > end:
+		print(red("End of range occurs before start of range"))
 		sys.exit(1)
 
-	if end > datetime.datetime.now()
-		errprint("End of range hasn't happened yet")
+	if end > datetime.datetime.now():
+		print(red("End of range hasn't happened yet"))
 		sys.exit(1)
 
 def acquire_log_files():
+	"""
+	Get all files ending in .log or .logs
+	"""
 	return get_by_filetype(['log', 'logs'])
 
 def get_by_filetype(filetypes):
@@ -262,7 +265,7 @@ def get_by_filetype(filetypes):
 		:filetypes: (list) list of filetypes
 	"""
 	if not isinstance(filetypes, list):
-		errprint("filetypes must be a list")
+		print(red("filetypes must be a list"))
 		sys.exit(1)
 
 	files = []
@@ -270,16 +273,27 @@ def get_by_filetype(filetypes):
 		files += [file for file in os.listdir() if file.split('.')[-1] == filetype]
 	return files
 
-def errprint(*args, **kwargs):
-	"""Print to stderr"""
-	print(*args, file=sys.stderr, **kwargs)
+def red(string):
+	"""
+	Convert a string to red text
+		:string: the string to convert to red text
+	"""
+	return f'\033[91m{string}\033[0m'
 
 def main():
 	parser = build_parser()
 	args = parser.parse_args()
 
 	actual_range = ' '.join(args.range)
-	parse_range(actual_range)
+	start,end = parse_range(actual_range)
+
+	if args.file:
+		if os.path.isfile(args.file):
+			files = args.file
+		else:
+			print(red(f"Could not file file {args.file}"))
+	else:
+		files = acquire_log_files()
 
 if __name__ == '__main__':
 	main()
