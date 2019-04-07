@@ -1,0 +1,3 @@
+[console_scripts]
+beaver = beaver.__main__:main
+
