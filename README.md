@@ -50,4 +50,4 @@ optional arguments:
  * `--output` - write output to a file, rather than `stdout`
  * `--recursive` - look for log files recursively, starting in the current directory
  
- ## ( θ ϖ θ )
+ ### ( θ ϖ θ )
