@@ -1,7 +1,12 @@
+"""
+Beaver (n) - an animal that eats logs
+"""
+
 import argparse
 import calendar
 import dateutil.parser
 import datetime
+import glob
 import os
 import re
 import sys
@@ -254,24 +259,32 @@ def validate_range(start, end):
 		print(red("End of range hasn't happened yet"))
 		sys.exit(1)
 
-def acquire_log_files():
+def acquire_log_files(recursive):
 	"""
 	Get all files ending in .log or .logs
+		:recursive: (bool) if true, will search recursively
 	"""
-	return get_by_filetype(['log', 'logs'])
+	return get_by_filetype(['log', 'logs'], recursive)
 
-def get_by_filetype(filetypes):
+def get_by_filetype(filetypes, recursive):
 	"""
 	Get all files in the current directory that are a specific filetype
 		:filetypes: (list) list of filetypes
+		:recursive: (bool) if true, will search recursively
 	"""
 	if not isinstance(filetypes, list):
 		print(red("filetypes must be a list"))
 		sys.exit(1)
 
 	files = []
-	for filetype in filetypes:
-		files += [file for file in os.listdir() if file.split('.')[-1] == filetype]
+	if recursive:
+		for filetype in filetypes:
+			for file in glob.iglob(f'./**/*.{filetype}', recursive=True):
+				files.append(file)
+	else:
+		for filetype in filetypes:
+			files += [file for file in os.listdir() if file.split('.')[-1] == filetype]
+
 	return files
 
 def red(string):
@@ -293,7 +306,7 @@ def extract_timestamp(string):
 	Extract a timestamp from a given string
 		:string: (str) the string to parse
 	"""
-	return dateutil.parser.parse(string, fuzzy=True)
+	return dateutil.parser.parse(string, fuzzy_with_tokens=True)
 
 def parse_logs(files, start, end, output):
 	"""
@@ -305,29 +318,55 @@ def parse_logs(files, start, end, output):
 	"""
 	result = ""
 	for file in files:
+
+		# build a buffer for each file, which will be appended to result
 		rbuffer = ""
 		with open(file) as f:
 			lines = f.readlines()
 			result += green(f">> {file}") + "\n"
 
+		# parse each line of the log file
 		for line in lines:
+			# break line into 4 word chunks to try and find timestamp
 			elements = line.split()
 			start_index = 0
-			end_index = 2 if len(elements) > 2 else -1
+			end_index = 4 if len(elements) > 4 else -1
+
 			while not end_index == -1:
 				query = ' '.join(line.split()[start_index:end_index])
 				try:
-					timestamp = extract_timestamp(query)
+					timestamp, tokens = extract_timestamp(query)
+
+					# remove invalid tokens and update timestamp
+					if len(tokens) > 0:
+						to_remove = [token.strip() for token in tokens if not token == ' ']
+						for token in to_remove:
+							query = ' '.join([word for word in query.split() if not token in word])
+						timestamp, tokens = extract_timestamp(query)
+
+					# if timestamp is in the future, adjust to 1 year prior
+					if timestamp > datetime.datetime.now():
+						timestamp = datetime.datetime(
+							day=timestamp.day,
+							month=timestamp.month,
+							year=timestamp.year-1,
+							hour=timestamp.hour,
+							minute=timestamp.minute,
+							second=timestamp.second
+						)
+
+					# evaluate against range
 					if start < timestamp < end:
 						rbuffer += line
 					break
+
 				except ValueError:
 					start_index += 1
 					end_index += 1
 					if end_index > len(elements):
 						end_index = -1
-					continue
 
+		# if no valid queries found, put message in buffer for file
 		if rbuffer == "":
 			rbuffer += red(f"  No logs found in {file} for query range")
 
@@ -336,7 +375,7 @@ def parse_logs(files, start, end, output):
 	if output == '':
 		print(result)
 	else:
-		with open(output) as f:
+		with open(output, 'w+') as f:
 			f.write(result)
 
 def build_parser():
@@ -344,7 +383,7 @@ def build_parser():
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class = argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument('range', nargs="+", help="the range for which to parse logs")
 	parser.add_argument('-f', '--file', type=str, default="", required=False, help="a specific log file to parse")
-	parser.add_argument('-o', '--output', type=str, default="", required=False, help="if included, the file to write output to")
+	parser.add_argument('-o', '--output', type=str, default="", required=False, help="if included, the file to which output will be writen")
 	parser.add_argument('-r', '--recursive', action='store_true', default=False, required=False, help="if included, beaver will search for log files recursively starting from the current directory")
 	return parser
 
@@ -357,12 +396,12 @@ def main():
 
 	if args.file:
 		if os.path.isfile(args.file):
-			files = args.file
+			files = [args.file]
 		else:
-			print(red(f"Could not file file {args.file}"))
+			print(red(f"Could not file {args.file}"))
 			sys.exit(1)
 	else:
-		files = acquire_log_files()
+		files = acquire_log_files(args.recursive)
 
 	parse_logs(files, start, end, args.output)
 
