@@ -329,26 +329,16 @@ def build_query(line, length, start, end):
 
 	while not end_index == -1:
 		query = ' '.join(line.split()[start_index:end_index])
-		#print(f"query: {query}")
+
 		try:
 			timestamp, tokens = extract_timestamp(query)
-			#print(f"tokens: {tokens}")
 
 			# remove invalid tokens and update timestamp
 			if len(tokens) > 0:
 				to_remove = [token.strip() for token in tokens if not token == ' ']
-				#print(f"to_remove: {to_remove}")
 				for index, token in enumerate(to_remove):
 					query = query.replace(token, ' ', 1)
-					#print(f"new query {index}: {query}")
-
-
-
-				# for index, token in enumerate(to_remove):
-				# 	query = ' '.join([word for word in query.split() if not token in word])
-				# 	print(f"new query {index}: {query}")
 				timestamp, tokens = extract_timestamp(query)
-				#print(f"new tokens:{tokens}")
 
 			# normalize
 			timestamp = normalize_datetime(timestamp)
@@ -363,8 +353,6 @@ def build_query(line, length, start, end):
 					minute=timestamp.minute,
 					second=timestamp.second
 				))
-
-			print(f"Timestamp: {timestamp}")
 
 			# evaluate against range
 			if start < timestamp < end:
