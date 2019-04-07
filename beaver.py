@@ -3,14 +3,8 @@ import calendar
 import dateutil.parser
 import datetime
 import os
+import re
 import sys
-
-def build_parser():
-	"""Build CLI parser"""
-	parser = argparse.ArgumentParser(description=__doc__, formatter_class = argparse.ArgumentDefaultsHelpFormatter)
-	parser.add_argument('range', nargs="+", help="the range for which to parse logs")
-	parser.add_argument('-f', '--file', type=str, default="", required=False, help="a specific log file to parse")
-	return parser
 
 def parse_range(string):
 	"""
@@ -29,7 +23,7 @@ def parse_range(string):
 
 	return start, end
 
-def validate_date(date):
+def validate_date(date, silence=False):
 	"""
 	Validate string as a date format
 		:date: (str) the date to validate
@@ -104,8 +98,11 @@ def validate_date(date):
 			new_date = datetime.datetime(day=int(temp_day), month=int(months[temp_month]+1), year=int(temp_year))
 		else:
 			# invalid
-			print(red("Could not determine date format"))
-			sys.exit(1)
+			if not silence:
+				print(red("Could not determine date format"))
+				sys.exit(1)
+			else:
+				return False, False, False
 	elif '/' in date:
 		# day, month, year separated by /
 		elements = date.split('/')
@@ -134,8 +131,11 @@ def validate_date(date):
 		else:
 			new_date = dateutil.parser.parse(date)
 	else:
-		print(red("Could not determine date format"))
-		sys.exit(1)
+		if not silence:
+			print(red("Could not determine date format"))
+			sys.exit(1)
+		else:
+			return False, False, False
 
 	day = new_date.day
 	month = new_date.month
@@ -143,12 +143,11 @@ def validate_date(date):
 
 	return year, month, day
 
-def validate_time(time):
+def validate_time(time, silence=False):
 	"""
 	Validate string as a time format
 		:time: (str) the time to validate
 	"""
-
 	if time == '':
 		hours = '0'
 		minutes = '0'
@@ -180,9 +179,11 @@ def validate_time(time):
 				hours = str(int(hours) + 12)
 
 	if not hours.isdigit() or not minutes.isdigit() or not seconds.isdigit():
-		print(hours, minutes, seconds)
-		print(red("Could not determine time format"))
-		sys.exit(1)
+		if not silence:
+			print(red("Could not determine time format"))
+			sys.exit(1)
+		else:
+			return False, False, False
 
 	return int(hours), int(minutes), int(seconds)
 
@@ -237,6 +238,9 @@ def validate_datetime(string):
 	# Parse date
 	year, month, day = validate_date(date)
 
+	if not all([hours, minutes, seconds, year, month, day]):
+		return False
+
 	return datetime.datetime(year=year, month=month, day=day, hour=hours, minute=minutes, second=seconds)
 
 def validate_range(start, end):
@@ -245,6 +249,8 @@ def validate_range(start, end):
 		:start: (datetime) the start of the range
 		:end: (datetime) the end of the range
 	"""
+	print(start)
+	print(end)
 	if start > end:
 		print(red("End of range occurs before start of range"))
 		sys.exit(1)
@@ -280,6 +286,95 @@ def red(string):
 	"""
 	return f'\033[91m{string}\033[0m'
 
+def green(string):
+	"""
+	Convert a string to green text
+		:string: the string to convert to green text
+	"""
+	return f'\033[92m{string}\033[0m'
+
+def locate_date_and_time(string):
+	"""
+	Locate the date and time stamps in a string
+		:string: (str) the string to search
+	"""
+	date = time = ''
+	for word in string:
+		attempt = validate_date(word)
+		if not all(attempt):
+			date = word
+			break
+	for word in string:
+		attempt = validate_time(word)
+		if not all(attempt):
+			time = word
+			break
+	if date == '' and time == '':
+		return False, False
+	return date, time
+
+def dt(date, time):
+	"""
+	Create a datetime based on date and time
+		:date: the date for the datetime
+		:time: the time for the datetime
+	"""
+	return datetime.datetime(
+		year=date[0], month=date[1], day=date[2], 
+		hour=time[0], minute=time[1], second=[2]
+	)
+
+def parse_logs(files, start, end, output):
+	"""
+	Parse a given set of log files for logging between a start and end date
+		:files: (list) the list of log files to parse
+		:start: (datetime) the start of the logging range for which to search
+		:end: (datetime) the end of the logging range for which to search
+		:output: (str) the optional file to which output will be written
+	"""
+	result = ""
+	for file in files:
+		with open(file) as f:
+			lines = f.readlines()
+			result += green(file) + "\n"
+		for line in lines:
+			line_written = False
+
+			# if timestamp is in square brackets
+			in_brackets_text = str(re.findall('\[(.*)\]', line)[0])
+			date, time = locate_date_and_time(in_brackets_text)
+			if all([date, time]):
+				line_written = True
+				if start < dt(date, time) < end:
+					result += line + "\n"
+
+			# if timestamp is at the beginning of the line
+			if not line_written:
+				words = line.split()
+				date, time = locate_date_and_time(' '.join(words[0], words[1], words[2]))
+				if all([date, time]):
+					line_written = True
+					if start < dt(date, time) < end:
+						result += line + "\n"
+
+		result += line + "\n"
+
+	if output == '':
+		print(result)
+	else:
+		with open(output) as f:
+			f.write(result)
+
+
+def build_parser():
+	"""Build CLI parser"""
+	parser = argparse.ArgumentParser(description=__doc__, formatter_class = argparse.ArgumentDefaultsHelpFormatter)
+	parser.add_argument('range', nargs="+", help="the range for which to parse logs")
+	parser.add_argument('-f', '--file', type=str, default="", required=False, help="a specific log file to parse")
+	parser.add_argument('-o', '--output', type=str, default="", required=False, help="if included, the file to write output to")
+	parser.add_argument('-r', '--recursive', action='store_true', default=False, required=False, help="if included, beaver will search for log files recursively starting from the current directory")
+	return parser
+
 def main():
 	parser = build_parser()
 	args = parser.parse_args()
@@ -292,8 +387,11 @@ def main():
 			files = args.file
 		else:
 			print(red(f"Could not file file {args.file}"))
+			sys.exit(1)
 	else:
 		files = acquire_log_files()
+
+	parse_logs(files, start, end, args.output)
 
 if __name__ == '__main__':
 	main()
