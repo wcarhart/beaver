@@ -8,6 +8,7 @@ import dateutil.parser
 import datetime
 import glob
 import os
+import pytz
 import re
 import sys
 
@@ -26,7 +27,10 @@ def parse_range(string):
 	end_datetime = validate_datetime(end)
 	validate_range(start_datetime, end_datetime)
 
-	return start_datetime, end_datetime
+	return normalize_datetime(start_datetime), normalize_datetime(end_datetime)
+
+def normalize_datetime(dt):
+	return dt.astimezone(pytz.utc)
 
 def validate_date(date, silence=False):
 	"""
@@ -308,6 +312,73 @@ def extract_timestamp(string):
 	"""
 	return dateutil.parser.parse(string, fuzzy_with_tokens=True)
 
+def build_query(line, length, start, end):
+	"""
+	Attempt to query the line from the log file
+		:line: (str) the line from the log file to parse
+		:length: (int) the number of words to make each chunk
+		:start: (datetime) the start of the logging range for which to search
+		:end: (datetime) the end of the logging range for which to search
+	"""
+	rbuffer = ""
+
+	# break line into chunks to try and find timestamp
+	elements = line.split()
+	start_index = 0
+	end_index = length if len(elements) > length else -1
+
+	while not end_index == -1:
+		query = ' '.join(line.split()[start_index:end_index])
+		#print(f"query: {query}")
+		try:
+			timestamp, tokens = extract_timestamp(query)
+			#print(f"tokens: {tokens}")
+
+			# remove invalid tokens and update timestamp
+			if len(tokens) > 0:
+				to_remove = [token.strip() for token in tokens if not token == ' ']
+				#print(f"to_remove: {to_remove}")
+				for index, token in enumerate(to_remove):
+					query = query.replace(token, ' ', 1)
+					#print(f"new query {index}: {query}")
+
+
+
+				# for index, token in enumerate(to_remove):
+				# 	query = ' '.join([word for word in query.split() if not token in word])
+				# 	print(f"new query {index}: {query}")
+				timestamp, tokens = extract_timestamp(query)
+				#print(f"new tokens:{tokens}")
+
+			# normalize
+			timestamp = normalize_datetime(timestamp)
+
+			# if timestamp is in the future, adjust to 1 year prior
+			if timestamp > normalize_datetime(datetime.datetime.now()):
+				timestamp = normalize_datetime(datetime.datetime(
+					day=timestamp.day,
+					month=timestamp.month,
+					year=timestamp.year-1,
+					hour=timestamp.hour,
+					minute=timestamp.minute,
+					second=timestamp.second
+				))
+
+			print(f"Timestamp: {timestamp}")
+
+			# evaluate against range
+			if start < timestamp < end:
+				rbuffer += line
+			break
+
+		except ValueError:
+			start_index += 1
+			end_index += 1
+			if end_index > len(elements):
+				end_index = -1
+
+	return rbuffer
+
 def parse_logs(files, start, end, output):
 	"""
 	Parse a given set of log files for logging between a start and end date
@@ -318,59 +389,29 @@ def parse_logs(files, start, end, output):
 	"""
 	result = ""
 	for file in files:
+		file_buffer = ""
 
 		# build a buffer for each file, which will be appended to result
-		rbuffer = ""
 		with open(file) as f:
 			lines = f.readlines()
 			result += green(f">> {file}") + "\n"
 
 		# parse each line of the log file
 		for line in lines:
-			# break line into 4 word chunks to try and find timestamp
-			elements = line.split()
-			start_index = 0
-			end_index = 4 if len(elements) > 4 else -1
+			# try with 4 word chunks, then 3, then 2
+			query_buffer = build_query(line, 4, start, end)
+			if query_buffer == "":
+				query_buffer = build_query(line, 3, start, end)
+			if query_buffer == "":
+				query_buffer = build_query(line, 2, start, end)
 
-			while not end_index == -1:
-				query = ' '.join(line.split()[start_index:end_index])
-				try:
-					timestamp, tokens = extract_timestamp(query)
-
-					# remove invalid tokens and update timestamp
-					if len(tokens) > 0:
-						to_remove = [token.strip() for token in tokens if not token == ' ']
-						for token in to_remove:
-							query = ' '.join([word for word in query.split() if not token in word])
-						timestamp, tokens = extract_timestamp(query)
-
-					# if timestamp is in the future, adjust to 1 year prior
-					if timestamp > datetime.datetime.now():
-						timestamp = datetime.datetime(
-							day=timestamp.day,
-							month=timestamp.month,
-							year=timestamp.year-1,
-							hour=timestamp.hour,
-							minute=timestamp.minute,
-							second=timestamp.second
-						)
-
-					# evaluate against range
-					if start < timestamp < end:
-						rbuffer += line
-					break
-
-				except ValueError:
-					start_index += 1
-					end_index += 1
-					if end_index > len(elements):
-						end_index = -1
-
+			file_buffer += query_buffer
+			
 		# if no valid queries found, put message in buffer for file
-		if rbuffer == "":
-			rbuffer += red(f"  No logs found in {file} for query range")
+		if file_buffer == "":
+			file_buffer += red(f"  No logs found in {file} for query range")
 
-		result += rbuffer + "\n\n"
+		result += file_buffer + "\n\n"
 
 	if output == '':
 		print(result)
