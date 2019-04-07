@@ -49,3 +49,5 @@ optional arguments:
  * `--file` - use this if you only want to parse a specific file, not all log files. By default, `beaver` searches the current directory for any files ending in `.log` or `.logs`
  * `--output` - write output to a file, rather than `stdout`
  * `--recursive` - look for log files recursively, starting in the current directory
+ 
+ ## ( θ ϖ θ )
