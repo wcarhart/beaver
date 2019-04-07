@@ -1,9 +1,0 @@
-README.md
-setup.py
-beaver/__init__.py
-beaver/beaver.py
-beaver.egg-info/PKG-INFO
-beaver.egg-info/SOURCES.txt
-beaver.egg-info/dependency_links.txt
-beaver.egg-info/entry_points.txt
-beaver.egg-info/top_level.txt
