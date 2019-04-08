@@ -23,7 +23,13 @@ python3 beaver.py 1:23pm on August 15th 2017 to 10:35 PM on 2 April 2018
 ...and many more!
 
 ### Installation
-More coming soon...
+Clone this repo. You can make an alias if you'd like to use the script anywhere. Put:
+```
+alias beaver='python3 ~/beaver.py'
+```
+in your `~/.bashrc` file. If you you install `beaver` somewhere else, you'll need to change the path in the above alias.
+
+I've tried putting `beaver` on PyPI, but it was being difficult, couldn't get the `entry_points` to work. You can find it [here](https://pypi.org/project/beavr/).
 
 ### Usage
 ```
