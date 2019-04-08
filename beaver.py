@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Beaver (n) - an animal that eats logs
 """
@@ -375,6 +376,10 @@ def parse_logs(files, start, end, output):
 		:end: (datetime) the end of the logging range for which to search
 		:output: (str) the optional file to which output will be written
 	"""
+	if len(files) == 0:
+		print(red("No valid log files specified"))
+		sys.exit(1)
+		
 	result = ""
 	for file in files:
 		file_buffer = ""
@@ -435,4 +440,4 @@ def main():
 	parse_logs(files, start, end, args.output)
 
 if __name__ == '__main__':
-	main()
+    main()

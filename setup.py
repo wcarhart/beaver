@@ -10,7 +10,7 @@ README = (HERE / "README.md").read_text()
 # This call to setup() does all the work
 setup(
     name="beavr",
-    version="1.0.0",
+    version="1.0.5",
     description="An animal that eats logs",
     long_description=README,
     long_description_content_type="text/markdown",
@@ -22,12 +22,5 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",
-    ],
-    packages=["beaver"],
-    include_package_data=True,
-    entry_points={
-        "console_scripts": [
-            "beaver=beaver.__main__:main",
-        ]
-    },
+    ]
 )
